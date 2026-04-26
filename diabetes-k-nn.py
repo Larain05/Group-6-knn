@@ -330,7 +330,7 @@ def find_best_k(X_train, y_train, X_test, y_test,
 
 
 # =============================================================
-# SECTION 7 — LOAD & PREPROCESS DATASET
+# SECTION 7 — LOAD & PREPROCESS DATASET (FINAL FIX)
 # =============================================================
 
 print("=" * 60)
@@ -348,53 +348,74 @@ print(df.info())
 print("\n── SUMMARY BEFORE PREPROCESSING ────────────────────────")
 print(df.describe().round(2))
 
-# Replace biologically impossible zero values with NaN.
-# Glucose, BloodPressure, SkinThickness, Insulin, and BMI
-# cannot physically be zero — they are missing readings.
+
+# =============================================================
+# ✅ STEP 1 — CHECK ZERO VALUES
+# =============================================================
+
 columns_with_zero = ['Glucose', 'BloodPressure',
                      'SkinThickness', 'Insulin', 'BMI']
-for col in columns_with_zero:
-    df[col] = df[col].replace(0, np.nan)
 
-# Fill NaN with the column median.
-# Median is used instead of mean because it is robust to outliers
-# (e.g. extreme Insulin readings would skew the mean upward).
+print("\n── ZERO VALUE CHECK ────────────────────────────────────")
 for col in columns_with_zero:
-    df[col] = df[col].fillna(df[col].median())
+    zero_count = (df[col] == 0).sum()
+    print(f"{col:<20}: {zero_count} zero values")
+
+
+# =============================================================
+# ✅ STEP 2 — CONVERT ZERO → NaN (treat as missing)
+# =============================================================
+
+df[columns_with_zero] = df[columns_with_zero].replace(0, np.nan)
+
+
+# =============================================================
+# ✅ STEP 3 — MEDIAN IMPUTATION
+# =============================================================
+
+df[columns_with_zero] = df[columns_with_zero].apply(
+    lambda col: col.fillna(col.median())
+)
+
 
 print("\n── SUMMARY AFTER PREPROCESSING ─────────────────────────")
 print(df.describe().round(2))
+
+
+# =============================================================
+# CONTINUE AS NORMAL
+# =============================================================
 
 feature_names = ['Pregnancies', 'Glucose', 'BloodPressure',
                  'SkinThickness', 'Insulin', 'BMI',
                  'DiabetesPedigreeFunction', 'Age']
 
-X = df[feature_names].values   # Shape: (768, 8)
-y = df['Outcome'].values       # Shape: (768,)
+X = df[feature_names].values
+y = df['Outcome'].values
 
 
 # =============================================================
-# SECTION 8 — SCALE & SPLIT (MANUAL)
+# SECTION 8 — SPLIT FIRST, THEN SCALE (FIXED)
 # =============================================================
 
-# Feature scaling — our manual StandardScaler
-scaler   = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+# Split BEFORE scaling
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+# Now scale using ONLY training data
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test  = scaler.transform(X_test)
 
 print(f"\n── FEATURE SCALING ──────────────────────────────────────")
 print(f"  Learned mean (first 3 features): {scaler.mean_[:3].round(3)}")
 print(f"  Learned std  (first 3 features): {scaler.std_[:3].round(3)}")
 
-# Train / test split — our manual function
-X_train, X_test, y_train, y_test = train_test_split(
-    X_scaled, y, test_size=0.2, random_state=42
-)
-
 print(f"\n── TRAIN / TEST SPLIT ───────────────────────────────────")
 print(f"  Total samples  : {len(X)}")
 print(f"  Training samples: {len(X_train)}  ({len(X_train)/len(X)*100:.0f}%)")
 print(f"  Testing  samples: {len(X_test)}   ({len(X_test)/len(X)*100:.0f}%)")
-
 
 # =============================================================
 # SECTION 9 — TRAIN KNN (K = 3, 5, 7) WITH EUCLIDEAN DISTANCE
