@@ -297,7 +297,7 @@ ax8.hist(b1, bins=15, color=P['amber'], alpha=0.5, label='Diabetic', zorder=4)
 ax8.legend()
 
 # ── Save & Show ───────────────────────────────────────────────────────────────
-plt.savefig(os.path.join(script_dir, 'knn_results_dark_modern.png'), dpi=150, bbox_inches='tight', facecolor=P['bg'])
+plt.savefig(os.path.join(script_dir, 'knn_results.png'), dpi=150, bbox_inches='tight', facecolor=P['bg'])
 print('\n  Saved: knn_results.png')
 plt.show()
 
