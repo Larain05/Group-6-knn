@@ -145,7 +145,86 @@ best_k = max(cm_results, key=lambda k: cm_results[k]['acc'])
 print(f'\n  ★ Best K = {best_k} with {cm_results[best_k]["acc"]*100:.2f}% Accuracy\n')
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  BONUS — VISUALISATIONS
+#  BONUS — LOGISTIC REGRESSION COMPARISON
+# ══════════════════════════════════════════════════════════════════════════════
+
+section('BONUS — LOGISTIC REGRESSION COMPARISON')
+
+import math as _math
+
+def sigmoid(z): return 1.0 / (1.0 + _math.exp(-max(-500, min(500, z))))
+
+def lr_train(train, lr=0.1, epochs=1000):
+    n_feat = len(FEAT_COLS)
+    weights = [0.0] * n_feat
+    bias = 0.0
+    for _ in range(epochs):
+        dw = [0.0] * n_feat
+        db = 0.0
+        for row in train:
+            feats = list(row[:n_feat])
+            label = row[-1]
+            z     = sum(w * x for w, x in zip(weights, feats)) + bias
+            pred  = sigmoid(z)
+            err   = pred - label
+            for i in range(n_feat):
+                dw[i] += err * feats[i]
+            db += err
+        m = len(train)
+        weights = [w - lr * d / m for w, d in zip(weights, dw)]
+        bias   -= lr * db / m
+    return weights, bias
+
+def lr_predict(row, weights, bias, threshold=0.5):
+    n_feat = len(FEAT_COLS)
+    z = sum(w * x for w, x in zip(weights, list(row[:n_feat]))) + bias
+    return 1 if sigmoid(z) >= threshold else 0
+
+subsection('Training Logistic Regression (gradient descent, 1000 epochs, lr=0.1)')
+lr_weights, lr_bias = lr_train(train_set, lr=0.1, epochs=1000)
+
+print(f'\n  {"Feature":<28} {"Weight":>12}')
+print(f'  {sep("-", 42)}')
+for feat, w in zip(FEAT_COLS, lr_weights):
+    print(f'  {feat:<28} {w:>12.6f}')
+print(f'  {"Bias":<28} {lr_bias:>12.6f}')
+
+# ── Evaluate LR ───────────────────────────────────────────────────────────────
+lr_preds   = [lr_predict(t, lr_weights, lr_bias) for t in test_set]
+lr_actuals = [int(t[-1]) for t in test_set]
+
+lr_tp = sum(a == 1 and p == 1 for a, p in zip(lr_actuals, lr_preds))
+lr_tn = sum(a == 0 and p == 0 for a, p in zip(lr_actuals, lr_preds))
+lr_fp = sum(a == 0 and p == 1 for a, p in zip(lr_actuals, lr_preds))
+lr_fn = sum(a == 1 and p == 0 for a, p in zip(lr_actuals, lr_preds))
+lr_total = lr_tp + lr_tn + lr_fp + lr_fn
+lr_acc  = (lr_tp + lr_tn) / lr_total if lr_total else 0.0
+lr_prec = lr_tp / (lr_tp + lr_fp) if (lr_tp + lr_fp) else 0.0
+lr_rec  = lr_tp / (lr_tp + lr_fn) if (lr_tp + lr_fn) else 0.0
+lr_f1   = 2 * lr_prec * lr_rec / (lr_prec + lr_rec) if (lr_prec + lr_rec) else 0.0
+
+subsection('Head-to-Head Comparison: Best KNN vs Logistic Regression')
+bk = cm_results[best_k]
+knn_f1 = (2 * bk['prec'] * bk['rec'] / (bk['prec'] + bk['rec'])
+          if (bk['prec'] + bk['rec']) else 0.0)
+
+print(f'\n  {"Metric":<18} {"KNN (K=" + str(best_k) + ")":>14} {"Logistic Reg.":>16}')
+print(f'  {sep("-", 50)}')
+print(f'  {"Accuracy":<18} {bk["acc"]*100:>13.2f}%  {lr_acc*100:>14.2f}%')
+print(f'  {"Precision":<18} {bk["prec"]*100:>13.2f}%  {lr_prec*100:>14.2f}%')
+print(f'  {"Recall":<18} {bk["rec"]*100:>13.2f}%  {lr_rec*100:>14.2f}%')
+print(f'  {"F1 Score":<18} {knn_f1*100:>13.2f}%  {lr_f1*100:>14.2f}%')
+print(f'  {"TP":<18} {bk["tp"]:>14}   {lr_tp:>14}')
+print(f'  {"TN":<18} {bk["tn"]:>14}   {lr_tn:>14}')
+print(f'  {"FP":<18} {bk["fp"]:>14}   {lr_fp:>14}')
+print(f'  {"FN":<18} {bk["fn"]:>14}   {lr_fn:>14}')
+
+lr_results = dict(tp=lr_tp, tn=lr_tn, fp=lr_fp, fn=lr_fn,
+                  acc=lr_acc, prec=lr_prec, rec=lr_rec, f1=lr_f1)
+knn_f1_best = knn_f1
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  BONUS — VISUALISATIONS (ADJUSTED HIERARCHY)
 # ══════════════════════════════════════════════════════════════════════════════
 
 section('BONUS — GENERATING VISUALISATIONS')
@@ -153,7 +232,6 @@ print('\n  Building plots … (close the window to exit)')
 
 data = train_imputed + test_imputed
 
-# ── Global Style ──────────────────────────────────────────────────────────────
 plt.rcParams.update({
     'font.family'       : 'sans-serif',
     'font.sans-serif'   : ['Segoe UI', 'Helvetica Neue', 'Arial', 'sans-serif'],
@@ -178,37 +256,26 @@ plt.rcParams.update({
 })
 
 P = {
-    'cyan'   : '#22D3EE',
-    'violet' : '#A78BFA',
-    'rose'   : '#FB7185',
-    'emerald': '#34D399',
-    'amber'  : '#FBBF24',
-    'bg'     : '#0F172A',
-    'text'   : '#F8FAFC',
-    'muted'  : '#94A3B8'
+    'cyan': '#22D3EE', 'violet': '#A78BFA', 'rose': '#FB7185', 
+    'emerald': '#34D399', 'amber': '#FBBF24', 'bg': '#0F172A', 
+    'text': '#F8FAFC', 'muted': '#94A3B8'
 }
 
 def style_card(ax, title):
-    """Applies a clean, modern card aesthetic to an axes."""
     ax.set_title(title, fontsize=12, fontweight='bold', color=P['text'], pad=15, loc='left')
     ax.grid(True, axis='y', color=P['muted'], alpha=0.15)
     ax.set_axisbelow(True)
     ax.spines['bottom'].set_color(P['muted'])
     ax.spines['bottom'].set_alpha(0.3)
 
-# ── Figure Layout ─────────────────────────────────────────────────────────────
-# layout='constrained' with no forced 'y' value prevents top clipping
-fig = plt.figure(figsize=(16, 10), layout='constrained')
+fig = plt.figure(figsize=(16, 15), layout='constrained')
 fig.patch.set_facecolor(P['bg'])
-fig.suptitle('KNN · Diabetes Classification Dashboard', 
-             fontsize=18, fontweight='bold', color=P['text'])
+fig.suptitle('KNN · Diabetes Classification Dashboard', fontsize=18, fontweight='bold', color=P['text'])
 
-# 6-column grid to allow 3-item rows and 2-item rows to be perfectly symmetric
-gs = GridSpec(3, 6, figure=fig)
+# GridSpec with adjusted height ratios: The last row (bonus) is explicitly shorter (0.75)
+gs = GridSpec(4, 6, figure=fig, height_ratios=[1.2, 1.2, 1.2, 0.75])
 
 # ══ ROW 1: Metrics (3 items, 2 cols each) ═════════════════════════════════════
-
-# Plot 1: Accuracy
 ax1 = fig.add_subplot(gs[0, 0:2])
 style_card(ax1, 'Accuracy vs K')
 accs = [cm_results[k]['acc'] * 100 for k in K_VALUES]
@@ -220,7 +287,6 @@ ax1.set_ylabel('Accuracy (%)')
 ax1.set_ylim(min(accs) - 2, max(accs) + 2)
 ax1.legend(loc='lower right')
 
-# Plot 2: Precision & Recall
 ax2 = fig.add_subplot(gs[0, 2:4])
 style_card(ax2, 'Precision & Recall')
 precs = [cm_results[k]['prec'] * 100 for k in K_VALUES]
@@ -231,7 +297,6 @@ ax2.set_xticks(K_VALUES)
 ax2.set_ylabel('%')
 ax2.legend()
 
-# Plot 3: Distances
 ax3 = fig.add_subplot(gs[0, 4:6])
 style_card(ax3, 'Top-10 Neighbour Distances')
 ranks = list(range(1, 11))
@@ -246,16 +311,9 @@ ax3.legend(handles=[mpatches.Patch(color=P['cyan'], label='Non-diabetic'),
 
 
 # ══ ROW 2: Confusion Matrices (3 items, 2 cols each) ══════════════════════════
-
-CM_STYLE = [
-    (P['cyan'],   0.15), # TN
-    (P['rose'],   0.15), # FP
-    (P['amber'],  0.15), # FN
-    (P['emerald'],0.15)  # TP
-]
-
+CM_STYLE = [(P['cyan'], 0.15), (P['rose'], 0.15), (P['amber'], 0.15), (P['emerald'], 0.15)]
 for idx, k in enumerate(K_VALUES):
-    ax = fig.add_subplot(gs[1, idx*2 : (idx*2)+2]) # Spans cols: 0:2, 2:4, 4:6
+    ax = fig.add_subplot(gs[1, idx*2 : (idx*2)+2])
     ax.set_facecolor(P['bg'])
     ax.set_aspect('equal')
     ax.axis('off')
@@ -275,26 +333,61 @@ for idx, k in enumerate(K_VALUES):
     ax.set_title(f'K = {k}  |  Acc: {d["acc"]*100:.1f}%', fontsize=12, pad=12, fontweight='bold', color=P['text'])
 
 
-# ══ ROW 3: Distributions (2 items, 3 cols each for perfect symmetry) ══════════
-
+# ══ ROW 3: Distributions (Promoted to emphasize dataset) ══════════════════════
 g0 = [r['Glucose'] for r in data if r['Outcome'] == 0]
 g1 = [r['Glucose'] for r in data if r['Outcome'] == 1]
 b0 = [r['BMI'] for r in data if r['Outcome'] == 0]
 b1 = [r['BMI'] for r in data if r['Outcome'] == 1]
 
-# Plot 7: Glucose (Spans columns 0 to 3)
 ax7 = fig.add_subplot(gs[2, 0:3])
 style_card(ax7, 'Glucose Distribution')
 ax7.hist(g0, bins=15, color=P['cyan'], alpha=0.5, label='Non-diabetic', zorder=3)
 ax7.hist(g1, bins=15, color=P['rose'], alpha=0.5, label='Diabetic', zorder=4)
 ax7.legend()
 
-# Plot 8: BMI (Spans columns 3 to 6)
 ax8 = fig.add_subplot(gs[2, 3:6])
 style_card(ax8, 'BMI Distribution')
 ax8.hist(b0, bins=15, color=P['cyan'], alpha=0.5, label='Non-diabetic', zorder=3)
 ax8.hist(b1, bins=15, color=P['amber'], alpha=0.5, label='Diabetic', zorder=4)
 ax8.legend()
+
+
+# ══ ROW 4: Logistic Regression Bonus (Demoted to bottom) ══════════════════════
+ax_comp1 = fig.add_subplot(gs[3, 0:3])
+style_card(ax_comp1, 'Accuracy & F1 (KNN vs Log. Reg.)')
+metrics_labels = ['Accuracy', 'Precision', 'Recall', 'F1 Score']
+knn_vals = [bk['acc']*100, bk['prec']*100, bk['rec']*100, knn_f1_best*100]
+lr_vals  = [lr_acc*100, lr_prec*100, lr_rec*100, lr_f1*100]
+x = range(len(metrics_labels))
+w = 0.35
+bars1 = ax_comp1.bar([i - w/2 for i in x], knn_vals, width=w, color=P['cyan'],   alpha=0.6, label=f'KNN', zorder=3)
+bars2 = ax_comp1.bar([i + w/2 for i in x], lr_vals,  width=w, color=P['violet'], alpha=0.6, label='Log. Reg.', zorder=3)
+for bar in list(bars1) + list(bars2):
+    ax_comp1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5,
+                  f'{bar.get_height():.1f}%', ha='center', va='bottom',
+                  fontsize=8, color=P['muted'])
+ax_comp1.set_xticks(list(x))
+ax_comp1.set_xticklabels(metrics_labels)
+ax_comp1.set_ylabel('%')
+ax_comp1.set_ylim(0, 100)
+ax_comp1.legend(loc='upper right')
+
+ax_comp2 = fig.add_subplot(gs[3, 3:6])
+style_card(ax_comp2, 'Matrix Counts (KNN vs Log. Reg.)')
+cm_labels = ['TP', 'TN', 'FP', 'FN']
+knn_cm = [bk['tp'], bk['tn'], bk['fp'], bk['fn']]
+lr_cm  = [lr_tp,    lr_tn,    lr_fp,    lr_fn]
+x2 = range(len(cm_labels))
+bars3 = ax_comp2.bar([i - w/2 for i in x2], knn_cm, width=w, color=P['cyan'],   alpha=0.6, label=f'KNN', zorder=3)
+bars4 = ax_comp2.bar([i + w/2 for i in x2], lr_cm,  width=w, color=P['violet'], alpha=0.6, label='Log. Reg.', zorder=3)
+for bar in list(bars3) + list(bars4):
+    ax_comp2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.3,
+                  str(int(bar.get_height())), ha='center', va='bottom',
+                  fontsize=9, color=P['muted'])
+ax_comp2.set_xticks(list(x2))
+ax_comp2.set_xticklabels(cm_labels)
+ax_comp2.set_ylabel('Count')
+ax_comp2.legend(loc='upper right')
 
 # ── Save & Show ───────────────────────────────────────────────────────────────
 plt.savefig(os.path.join(script_dir, 'knn_results.png'), dpi=150, bbox_inches='tight', facecolor=P['bg'])
